@@ -53,6 +53,9 @@ def import_enc(args):
     elif args.encoder == 'TurboAE_rate2_cnn':
         from encoders import ENC_turbofy_rate2_CNN as ENC  # not done yet
 
+    elif args.encoder in ['Turbo_rate3_lte', 'Turbo_rate3_757']:
+        from encoders import ENC_TurboCode as ENC          # DeepTurbo, encoder not trainable.
+
     else:
         print('Unknown Encoder, stop')
 
@@ -156,16 +159,41 @@ if __name__ == '__main__':
     print(model)
 
 
-    #################################################
-    # Setup Optimizers, only Adam works for now.
-    #################################################
-    if args.num_train_enc != 0:
-        enc_optimizer = optim.Adam(model.enc.parameters(),lr=args.enc_lr)
+    ##################################################################
+    # Setup Optimizers, only Adam and Lookahead for now.
+    ##################################################################
 
-    if args.num_train_dec != 0:
-        dec_optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.dec.parameters()), lr=args.dec_lr)
+    if args.optimizer == 'lookahead':
+        print('Using Lookahead Optimizers')
+        from optimizers import Lookahead
+        lookahead_k = 5
+        lookahead_alpha = 0.5
+        if args.num_train_enc != 0 and args.encoder not in ['Turbo_rate3_lte', 'Turbo_rate3_757']: # no optimizer for encoder
+            enc_base_opt  = optim.Adam(model.enc.parameters(), lr=args.enc_lr)
+            enc_optimizer = Lookahead(enc_base_opt, k=lookahead_k, alpha=lookahead_alpha)
 
-    general_optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),lr=args.dec_lr)
+        if args.num_train_dec != 0:
+            dec_base_opt  = optim.Adam(filter(lambda p: p.requires_grad, model.dec.parameters()), lr=args.dec_lr)
+            dec_optimizer = Lookahead(dec_base_opt, k=lookahead_k, alpha=lookahead_alpha)
+
+        general_base_opt = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),lr=args.dec_lr)
+        general_optimizer = Lookahead(general_base_opt, k=lookahead_k, alpha=lookahead_alpha)
+
+    else: # Adam, SGD, etc....
+        if args.optimizer == 'adam':
+            OPT = optim.Adam
+        elif args.optimizer == 'sgd':
+            OPT = optim.SGD
+        else:
+            OPT = optim.Adam
+
+        if args.num_train_enc != 0 and args.encoder not in ['Turbo_rate3_lte', 'Turbo_rate3_757']: # no optimizer for encoder
+            enc_optimizer = OPT(model.enc.parameters(),lr=args.enc_lr)
+
+        if args.num_train_dec != 0:
+            dec_optimizer = OPT(filter(lambda p: p.requires_grad, model.dec.parameters()), lr=args.dec_lr)
+
+        general_optimizer = OPT(filter(lambda p: p.requires_grad, model.parameters()),lr=args.dec_lr)
 
     #################################################
     # Training Processes
@@ -174,12 +202,12 @@ if __name__ == '__main__':
 
     for epoch in range(1, args.num_epoch + 1):
 
-        if args.joint_train == 1:
+        if args.joint_train == 1 and args.encoder not in ['Turbo_rate3_lte', 'Turbo_rate3_757']:
             for idx in range(args.num_train_enc+args.num_train_dec):
                 train(epoch, model, general_optimizer, args, use_cuda = use_cuda, mode ='encoder')
 
         else:
-            if args.num_train_enc > 0:
+            if args.num_train_enc > 0 and args.encoder not in ['Turbo_rate3_lte', 'Turbo_rate3_757']:
                 for idx in range(args.num_train_enc):
                     train(epoch, model, enc_optimizer, args, use_cuda = use_cuda, mode ='encoder')
 

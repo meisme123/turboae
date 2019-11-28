@@ -13,9 +13,11 @@ def get_args():
                                              'TurboAE_rate3_cnn2d',    # TurboAE Encoder, rate 1/3, Same Shape 2D CNN encoded.
                                              'TurboAE_rate2_rnn',      # TurboAE Encoder, rate 1/2, RNN
                                              'TurboAE_rate2_cnn',      # TurboAE Encoder, rate 1/2, Same Shape 1D CNN encoded.(TBD)
-                                             'rate3_cnn'               # CNN Encoder, rate 1/3. No Interleaver
+                                             'rate3_cnn',              # CNN Encoder, rate 1/3. No Interleaver
+                                             'Turbo_rate3_757',        # Turbo Code, rate 1/3, 757.
+                                             'Turbo_rate3_lte',        # Turbo Code, rate 1/3, LTE.
                                             ],
-                        default='TurboAE_rate3_cnn2d')
+                        default='TurboAE_rate3_cnn')
 
     parser.add_argument('-decoder', choices=['TurboAE_rate3_rnn',      # TurboAE Decoder, rate 1/3
                                              'TurboAE_rate3_cnn',      # TurboAE Decoder, rate 1/3, Same Shape 1D CNN Decoder
@@ -26,7 +28,7 @@ def get_args():
                                              'nbcjr_rate3',        # NeuralBCJR Decoder, rate 1/3, allow ft size.
                                              'rate3_cnn'           # CNN Encoder, rate 1/3. No Interleaver
                                             ],
-                        default='TurboAE_rate3_cnn2d')
+                        default='TurboAE_rate3_cnn')
     ################################################################
     # Channel related parameters
     ################################################################
@@ -109,7 +111,7 @@ def get_args():
     parser.add_argument('-block_len', type=int, default=100)
     parser.add_argument('-img_size', type=int, default=10, help='only used for CNN 2D structures')
 
-    parser.add_argument('-num_block', type=int, default=100)
+    parser.add_argument('-num_block', type=int, default=1000)
 
     parser.add_argument('-test_channel_mode',
                         choices=['block_norm','block_norm_ste'],
@@ -125,24 +127,23 @@ def get_args():
     parser.add_argument('-enc_quantize_level', type=float, default=2, help = 'only valid for block_norm_ste')
     parser.add_argument('-enc_value_limit', type=float, default=1.0, help = 'only valid for block_norm_ste')
     parser.add_argument('-enc_grad_limit', type=float, default=0.01, help = 'only valid for block_norm_ste')
-    parser.add_argument('-enc_clipping', choices=['inputs', 'gradient', 'both', 'default'], default='both',
+    parser.add_argument('-enc_clipping', choices=['inputs', 'gradient', 'both', 'none'], default='both',
                         help = 'only valid for ste')
 
     ################################################################
     # Optimizer related parameters
     ################################################################
-    parser.add_argument('-optimizer', choices=['adam'], default='adam', help = 'Only Adam works well.')
+    parser.add_argument('-optimizer', choices=['adam', 'lookahead', 'sgd'], default='adam', help = '....:)')
     parser.add_argument('-dec_lr', type = float, default=0.001, help='decoder leanring rate')
     parser.add_argument('-enc_lr', type = float, default=0.001, help='encoder leanring rate')
     parser.add_argument('-momentum', type = float, default=0.9)
-    parser.add_argument('-clip_norm', type = float, default=1.0)
 
     ################################################################
     # Loss related parameters
     ################################################################
 
-    parser.add_argument('-loss', choices=['bce', 'mse','focal', 'bce_block', 'maxBCE', 'bce_rl', 'enc_rl'],
-                        default='enc_rl', help='only BCE works')
+    parser.add_argument('-loss', choices=['bce', 'mse','focal', 'bce_block', 'maxBCE', 'bce_rl', 'enc_rl', 'soft_ber'],
+                        default='bce', help='only BCE works')
 
     parser.add_argument('-ber_lambda', type = float, default=1.0, help = 'default 0.0, the more emphasis on BER loss, only for bce_rl')
     parser.add_argument('-bce_lambda', type = float, default=1.0, help = 'default 1.0, the more emphasis on BCE loss, only for bce_rl')
@@ -161,6 +162,13 @@ def get_args():
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
 
+    parser.add_argument('--rec_quantize', action='store_true', default=False,
+                        help='binarize received signal, which will degrade performance a lot')
+    parser.add_argument('-rec_quantize_level', type=int, default=2,
+                        help='binarize received signal, which will degrade performance a lot')
+    parser.add_argument('-rec_quantize_limit', type=float, default=1.0,
+                        help='binarize received signal, which will degrade performance a lot')
+
     parser.add_argument('--print_pos_ber', action='store_true', default=False,
                         help='print positional ber when testing BER')
     parser.add_argument('--print_pos_power', action='store_true', default=False,
@@ -169,6 +177,13 @@ def get_args():
                         help='print test trajectory when testing BER')
     parser.add_argument('--precompute_norm_stats', action='store_true', default=False,
                         help='Use pre-computed mean/std statistics')
+
+    ################################################################
+    # Experimental
+    ################################################################
+    parser.add_argument('--is_k_same_code', action='store_true', default=False,
+                        help='train with same code for multiple times')
+    parser.add_argument('-k_same_code', type = int, default=2, help = 'add term to maxBCE loss, only wokr with maxBCE loss')
 
 
     args = parser.parse_args()
