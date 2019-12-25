@@ -20,7 +20,7 @@ def get_args():
                                              'Turbo_rate3_757',        # Turbo Code, rate 1/3, 757.
                                              'Turbo_rate3_lte',        # Turbo Code, rate 1/3, LTE.
                                             ],
-                        default='rate3_cnn2d')
+                        default='TurboAE_rate3_cnn2d')
 
     parser.add_argument('-decoder', choices=['TurboAE_rate3_rnn',      # TurboAE Decoder, rate 1/3
                                              'TurboAE_rate3_cnn',      # TurboAE Decoder, rate 1/3, Same Shape 1D CNN Decoder
@@ -34,7 +34,7 @@ def get_args():
                                              'rate3_cnn',           # CNN Encoder, rate 1/3. No Interleaver
                                              'rate3_cnn2d',
                                             ],
-                        default='rate3_cnn2d')
+                        default='TurboAE_rate3_cnn2d')
     ################################################################
     # Channel related parameters
     ################################################################
@@ -114,7 +114,13 @@ def get_args():
     parser.add_argument('-batch_size', type=int, default=100)
     parser.add_argument('-num_epoch', type=int, default=1)
     parser.add_argument('-test_ratio', type=int, default=1,help = 'only for high SNR testing')
+    # block length related
     parser.add_argument('-block_len', type=int, default=100)
+    parser.add_argument('-block_len_low', type=int, default=10)
+    parser.add_argument('-block_len_high', type=int, default=200)
+    parser.add_argument('--is_variable_block_len', action='store_true', default=False,
+                        help='training with different block length')
+
     parser.add_argument('-img_size', type=int, default=10, help='only used for CNN 2D structures')
 
     parser.add_argument('-num_block', type=int, default=1000)

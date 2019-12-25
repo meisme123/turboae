@@ -354,6 +354,16 @@ class ENC_interCNN(ENCBase):
         self.enc_linear_3 = torch.nn.DataParallel(self.enc_linear_3)
 
     def forward(self, inputs):
+
+        if self.args.is_variable_block_len:
+            block_len = inputs.shape[1]
+            # reset interleaver
+            if self.args.is_interleave != 0:           # fixed interleaver.
+                seed = np.random.randint(0, self.args.is_interleave)
+                rand_gen = mtrand.RandomState(seed)
+                p_array = rand_gen.permutation(arange(block_len))
+                self.set_interleaver(p_array)
+
         inputs     = 2.0*inputs - 1.0
         x_sys      = self.enc_cnn_1(inputs)
         x_sys      = self.enc_act(self.enc_linear_1(x_sys))
@@ -362,7 +372,6 @@ class ENC_interCNN(ENCBase):
         x_p1       = self.enc_act(self.enc_linear_2(x_p1))
 
         x_sys_int  = self.interleaver(inputs)
-
         x_p2       = self.enc_cnn_3(x_sys_int)
         x_p2       = self.enc_act(self.enc_linear_3(x_p2))
 
@@ -502,6 +511,7 @@ class ENC_turbofy_rate2_CNN(ENCBase):
 
 #######################################################
 # TurboAE Encocder, with rate 1/3, CNN-2D.
+# in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True
 #######################################################
 from cnn_utils import SameShapeConv2d, DenseSameShapeConv2d
 from interleavers import  Interleaver2D
@@ -576,6 +586,7 @@ class ENC_interCNN2D(ENCBase):
 
 #######################################################
 # RNN Encocder, with rate 1/3, CNN-2D.
+# in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True
 #######################################################
 
 class ENC_CNN2D(ENCBase):
@@ -591,12 +602,12 @@ class ENC_CNN2D(ENCBase):
             CNN2d = SameShapeConv2d
 
         self.enc_cnn_1       = CNN2d(num_layer=args.enc_num_layer, in_channels=args.code_rate_k,
-                                                  out_channels= args.enc_num_unit, kernel_size = args.enc_kernel_size)
+                                     out_channels= args.enc_num_unit, kernel_size = args.enc_kernel_size)
 
-        self.enc_linear_1    =  torch.nn.Conv2d(args.enc_num_unit, 1, 1, 1, 0, bias=True)
+        self.enc_linear_1    = torch.nn.Conv2d(args.enc_num_unit, 1, 1, 1, 0, bias=True)
 
         self.enc_cnn_2       = CNN2d(num_layer=args.enc_num_layer, in_channels=args.code_rate_k,
-                                                  out_channels= args.enc_num_unit, kernel_size = args.enc_kernel_size)
+                                     out_channels= args.enc_num_unit, kernel_size = args.enc_kernel_size)
 
         self.enc_linear_2    = torch.nn.Conv2d(args.enc_num_unit, 1, 1, 1, 0, bias=True)
 
