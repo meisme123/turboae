@@ -101,33 +101,28 @@ class ENCBase(torch.nn.Module):
 
     def power_constraint(self, x_input):
 
-        if not self.args.precompute_norm_stats:
+        if self.args.no_code_norm:
+            return x_input
+        else:
             this_mean    = torch.mean(x_input)
             this_std     = torch.std(x_input)
-            x_input_norm = (x_input-this_mean)*1.0 / this_std
-        else:
-            x_input_norm = (x_input - self.mean_scalar)/self.std_scalar
 
-        if self.training:
-            # save pretrained mean/std. Pretrained not implemented in this code version.
-            try:
+            if self.args.precompute_norm_stats:
                 self.num_test_block += 1.0
                 self.mean_scalar = (self.mean_scalar*(self.num_test_block-1) + this_mean)/self.num_test_block
                 self.std_scalar  = (self.std_scalar*(self.num_test_block-1) + this_std)/self.num_test_block
-            except:
-                print('group normalization seems wired.!')
+                x_input_norm = (x_input - self.mean_scalar)/self.std_scalar
+            else:
+                x_input_norm = (x_input-this_mean)*1.0 / this_std
 
             if self.args.train_channel_mode == 'block_norm_ste':
                 stequantize = STEQuantize.apply
                 x_input_norm = stequantize(x_input_norm, self.args)
 
-        else:
-            if self.args.test_channel_mode == 'block_norm_ste':
-                stequantize = STEQuantize.apply
-                x_input_norm = stequantize(x_input_norm, self.args)
+            if self.args.enc_truncate_limit>0:
+                x_input_norm = torch.clamp(x_input_norm, -self.args.enc_truncate_limit, self.args.enc_truncate_limit)
 
-
-        return x_input_norm
+            return x_input_norm
 
 # Encoder with interleaver. Support different code rate.
 class ENC_turbofy_rate2(ENCBase):
@@ -386,7 +381,7 @@ class ENC_interCNN(ENCBase):
 #######################################################
 from cnn_utils import SameShapeConv1d
 class ENC_interCNN2Int(ENCBase):
-    def __init__(self, args, p_array):
+    def __init__(self, args, p_array1, p_array2):
         # turbofy only for code rate 1/3
         super(ENC_interCNN2Int, self).__init__(args)
         self.args             = args
@@ -409,16 +404,7 @@ class ENC_interCNN2Int(ENCBase):
 
         self.enc_linear_3    = torch.nn.Linear(args.enc_num_unit, 1)
 
-        self.interleaver1      = Interleaver(args, p_array)
-
-
-        seed2 = 1000
-        rand_gen2 = mtrand.RandomState(seed2)
-        p_array2 = rand_gen2.permutation(arange(args.block_len))
-
-        print('p_array1', p_array)
-        print('p_array2', p_array2)
-
+        self.interleaver1      = Interleaver(args, p_array1)
         self.interleaver2      = Interleaver(args, p_array2)
 
 
@@ -449,7 +435,7 @@ class ENC_interCNN2Int(ENCBase):
         x_p2       = self.enc_cnn_3(x_sys_int2)
         x_p2       = self.enc_act(self.enc_linear_3(x_p2))
 
-        x_tx       = torch.cat([x_sys,x_p1, x_p2], dim = 2)
+        x_tx       = torch.cat([x_sys, x_p1, x_p2], dim = 2)
 
         codes = self.power_constraint(x_tx)
 
@@ -531,17 +517,20 @@ class ENC_interCNN2D(ENCBase):
         self.enc_cnn_1       = CNN2d(num_layer=args.enc_num_layer, in_channels=args.code_rate_k,
                                                   out_channels= args.enc_num_unit, kernel_size = args.enc_kernel_size)
 
-        self.enc_linear_1    =  torch.nn.Conv2d(args.enc_num_unit, 1, 1, 1, 0, bias=True)
+        self.enc_linear_1    =  CNN2d(num_layer=1, in_channels= args.enc_num_unit,
+                                      out_channels= 1, kernel_size = 1, no_act=True)
 
         self.enc_cnn_2       = CNN2d(num_layer=args.enc_num_layer, in_channels=args.code_rate_k,
                                                   out_channels= args.enc_num_unit, kernel_size = args.enc_kernel_size)
 
-        self.enc_linear_2    = torch.nn.Conv2d(args.enc_num_unit, 1, 1, 1, 0, bias=True)
+        self.enc_linear_2    = CNN2d(num_layer=1, in_channels= args.enc_num_unit,
+                                                  out_channels= 1, kernel_size = 1, no_act=True)
 
         self.enc_cnn_3       = CNN2d(num_layer=args.enc_num_layer, in_channels=args.code_rate_k,
                                                   out_channels= args.enc_num_unit, kernel_size = args.enc_kernel_size)
 
-        self.enc_linear_3    = torch.nn.Conv2d(args.enc_num_unit, 1, 1, 1, 0, bias=True)
+        self.enc_linear_3    = CNN2d(num_layer=1, in_channels= args.enc_num_unit,
+                                                  out_channels= 1, kernel_size = 1, no_act=True)
 
         self.interleaver      = Interleaver2D(args, p_array)
 
@@ -563,15 +552,15 @@ class ENC_interCNN2D(ENCBase):
 
         inputs     = 2.0*inputs - 1.0
         x_sys      = self.enc_cnn_1(inputs)
-        x_sys      = self.enc_act(self.enc_linear_1(x_sys))
+        x_sys      = self.enc_linear_1(x_sys)
 
         x_p1       = self.enc_cnn_2(inputs)
-        x_p1       = self.enc_act(self.enc_linear_2(x_p1))
+        x_p1       = self.enc_linear_2(x_p1)
 
         x_sys_int  = self.interleaver(inputs)
 
         x_p2       = self.enc_cnn_3(x_sys_int)
-        x_p2       = self.enc_act(self.enc_linear_3(x_p2))
+        x_p2       = self.enc_linear_3(x_p2)
 
         x_tx       = torch.cat([x_sys,x_p1, x_p2], dim = 1)
         x_tx = x_tx.view(self.args.batch_size, self.args.code_rate_n, self.args.block_len)
